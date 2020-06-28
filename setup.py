@@ -12,26 +12,10 @@ import setuptools
 
 #%%
 
+with open('README.md', 'r') as f:
+    long_description = f.read()
 
-long_description = """# Bag cross validation
-
-Multiple instance labeling (MIL) refers to labeling data arranged in sets, or bags.  In MIL supervised learning, labels are known for bags of instances, and the goal is to assign bag-level labels to unobserved bags.
-
-A simple solution to the MIL problem is to treat each instance in a bag as a single instance (SI) that inherits the label of its bag.  Each SI in a bag are labeled with a single-instance estimator, and the bag label is reduced from some metric (mode, threshold, presence) of the SI observations.  Official terms include *presence based, threshold based, or count based concepts* (see A two-level learning method for generalized multi-instance problems by Weidmann Nils et. al.).
-
-scikit-learn is a popular tool for data analysis, and includes APIs for SI estimators.  It includes a convenient API for evaluating SI estimators, namely `cross_validate`
-
-This package uses sklearn's cross_validate method and extends it to MIL for SI estimators."""
-
-short_description="""
-Cross validation for labeling bag-level data with single-instance inference
-Commonly called Multiple Instance Learning (MIL)
-See
-Marc Carbonneau and Veronika Cheplygina and Eric Granger and Ghyslain Gagnon
-Multiple Instance Learning : A Survey of Problem Characteristics and Applications
-Pattern Recognition, Volume 77.1 Pg 329-353, 2018
-DOI={10.1016/j.patcog.2017.10.009}
-"""
+short_description="""Cross validation for labeling bag-level data with single-instance inference"""
 
 setuptools.setup(
     name="bag-cross-validate-johnv", # Replace with your own username
@@ -41,8 +25,9 @@ setuptools.setup(
     description=short_description,
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/pypa/sampleproject",
+    url="https://github.com/johnvorsten/bag-cross-validate",
     packages=setuptools.find_packages(),
+    license='MIT',
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
