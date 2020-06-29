@@ -20,7 +20,6 @@ if __name__ == '__main__':
     if _PROJECT_DIR not in sys.path:
         sys.path.insert(0, _PROJECT_DIR)
 
-# import bag_cross_validate
 from bag_cross_validate import (BagScorer, indexable, check_cv,
                                 _check_multimetric_scoring, is_classifier,
                                 Parallel, delayed, clone, cross_validate)

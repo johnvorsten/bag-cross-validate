@@ -7,50 +7,28 @@ Created on Wed Jun 24 20:53:13 2020
 
 
 # Python imports
-import sys
-import os
+import sys, os
 from collections import Counter
-
 import warnings
 import numbers
 import time
 from traceback import format_exc
-# from contextlib import suppress
 
 # Third party imports
-# Sklearn imports
-from sklearn.utils.validation import _check_fit_params, check_is_fitted, NotFittedError
+from sklearn.utils.validation import (_check_fit_params, check_is_fitted,
+                                      NotFittedError, _num_samples,
+                                      _deprecate_positional_args)
 from sklearn.utils.metaestimators import _safe_split
 from sklearn.model_selection._validation import _score, _aggregate_score_dicts
 from sklearn.base import is_classifier, clone
-from sklearn.utils import (indexable,
-                           # check_random_state,
-                           # _safe_indexing,
-                           _message_with_time)
-# from sklearn.utils.validation import _check_fit_params
-from sklearn.utils.validation import _num_samples
-from sklearn.utils.validation import _deprecate_positional_args
-# from sklearn.metrics import check_scoring
-from sklearn.metrics._scorer import _check_multimetric_scoring# , _MultimetricScorer
+from sklearn.utils import (indexable, _message_with_time)
+from sklearn.metrics._scorer import _check_multimetric_scoring
 from sklearn.exceptions import FitFailedWarning
 from sklearn.model_selection._split import check_cv
-# from sklearn.preprocessing import LabelEncoder
 
-# import scipy.sparse as sp
 from scipy.sparse import vstack
 from joblib import Parallel, delayed
 import numpy as np
-
-# Local imports
-if __name__ == '__main__':
-    # Remove the drive letter on windows
-    _CWD = os.path.splitdrive(os.getcwd())[1]
-    _PARTS = _CWD.split(os.sep)
-    # Project dir is one level above cwd
-    _PROJECT_DIR = os.path.join(os.sep, *_PARTS[:-1])
-    if _PROJECT_DIR not in sys.path:
-        sys.path.insert(0, _PROJECT_DIR)
-
 
 #%%
 
