@@ -27,6 +27,7 @@ from sklearn.exceptions import FitFailedWarning
 from sklearn.model_selection._split import check_cv
 
 from scipy.sparse import vstack
+from scipy.sparse import csr_matrix
 from joblib import Parallel, delayed
 import numpy as np
 
@@ -223,7 +224,7 @@ def _fit_and_score(estimator, X, y, scorer, train, test, verbose,
 
 
 @_deprecate_positional_args
-def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None,
+def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=None,
                    n_jobs=None, verbose=0, fit_params=None,
                    pre_dispatch='2*n_jobs', return_train_score=False,
                    return_estimator=False, error_score=np.nan):
@@ -442,10 +443,23 @@ class SingleInstanceGather:
         for bag, label in zip(bags, bag_labels):
             # Unpack bag into instances
 
-            if sparse:
+            if sparse and isinstance(bag, csr_matrix):
+                # Keep instances as sparse array
                 instances = bag # Sparse array
+            elif sparse and not isinstance(bag, csr_matrix):
+                # Convert instances to csr matrix if sparse=True and the bag
+                # is not currently a csr matrix
+                instances = csr_matrix(bag) # Dense array
+            elif not sparse and isinstance(bag, csr_matrix):
+                # Convert csr_array to dense array
+                instances = bag.toarray()
+            elif not sparse and not isinstance(bag, csr_matrix):
+                # Keep as dense array
+                instances = bag # Dense array
             else:
-                instances = bag.toarray() # Dense array
+                msg=('bags must be sparse array (scipy.sparse.csr_matrix) or' +
+                ' dense array (np.array). Got type {}')
+                raise TypeError(msg.format(type(bag)))
 
             labels = np.array([label].__mul__(instances.shape[0]))
 
@@ -522,7 +536,7 @@ class BagScorer(SingleInstanceGather):
         initializing the class
         inputs
         ------
-        scorer : (#TODO) dictionary of {'name':callable}
+        scorer : (#TODO)
         sparse : (bool)"""
 
         # Initialization parameters
@@ -558,14 +572,11 @@ class BagScorer(SingleInstanceGather):
         score : (float) result of score of estimator on bags
         """
         # Initialize positional and keyword arguments
-        X = positional_args[0]
-        y = positional_args[1]
+        X = positional_args[0] # Validation data (for predictions)
+        y = positional_args[1] # Ground truth (for metrics)
 
         # Test if estimator is fitted already or not
-        try:
-            check_is_fitted(estimator)
-        except NotFittedError:
-            estimator = self.estimator_fit(estimator, X, y_train=y)
+        check_is_fitted(estimator)
 
         # Predict on bags
         bag_predictions = self.predict_bags(estimator, X)
