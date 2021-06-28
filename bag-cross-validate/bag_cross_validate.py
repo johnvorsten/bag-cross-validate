@@ -7,28 +7,35 @@ Created on Wed Jun 24 20:53:13 2020
 
 
 # Python imports
-import sys, os
 from collections import Counter
 import warnings
 import numbers
 import time
 from traceback import format_exc
+from typing import Union
 
-# Third party imports
-from sklearn.utils.validation import (_check_fit_params, check_is_fitted,
-                                      NotFittedError, _num_samples,
+# Sklearn imports
+from sklearn.utils.validation import (_check_fit_params, 
+                                      check_is_fitted,
+                                      NotFittedError, 
+                                      _num_samples,
                                       _deprecate_positional_args)
 from sklearn.utils.metaestimators import _safe_split
-from sklearn.model_selection._validation import _score, _aggregate_score_dicts
-from sklearn.base import is_classifier, clone
-from sklearn.utils import (indexable, _message_with_time)
+from sklearn.model_selection._validation import (_score, 
+                                                 _aggregate_score_dicts, 
+                                                 logger)
+from sklearn.base import (is_classifier, 
+                          clone)
+from sklearn.utils import indexable
 from sklearn.metrics._scorer import _check_multimetric_scoring
 from sklearn.exceptions import FitFailedWarning
 from sklearn.model_selection._split import check_cv
 
+# Third party imports
 from scipy.sparse import vstack
 from scipy.sparse import csr_matrix
-from joblib import Parallel, delayed
+from joblib import (Parallel, 
+                    delayed)
 import numpy as np
 
 #%%
@@ -144,17 +151,16 @@ def _fit_and_score(estimator, X, y, scorer, train, test, verbose,
     X_train, y_train = _safe_split(estimator, X, y, train)
     X_test, y_test = _safe_split(estimator, X, y, test, train)
 
-
     """Let the custom bag scorer handle fitting of the estimator"""
     result = {}
     try:
         if y_train is None:
             # X_train is an iterabls of bags NOT single-instance examples
-            estimator = scorer.get('score').estimator_fit(estimator, X_train,
+            estimator = scorer.estimator_fit(estimator, X_train,
                                              y_train=y_train, **fit_params)
         else:
             # X_train, y_train are iterabls of bags NOT single-instance examples
-            estimator = scorer.get('score').estimator_fit(estimator, X_train,
+            estimator = scorer.estimator_fit(estimator, X_train,
                                              y_train=y_train, **fit_params)
 
     except Exception as e:
@@ -181,7 +187,11 @@ def _fit_and_score(estimator, X, y, scorer, train, test, verbose,
             raise ValueError("error_score must be the string 'raise' or a"
                              " numeric value. (Hint: if using 'raise', please"
                              " make sure that it has been spelled correctly.)")
+    
+    
     else:
+        # The estimator is fitted to data correctly
+        # Calculate scoring of estimator using custom scorer
         fit_time = time.time() - start_time
         test_scores = _score(estimator, X_test, y_test, scorer)
         score_time = time.time() - start_time - fit_time
@@ -220,6 +230,7 @@ def _fit_and_score(estimator, X, y, scorer, train, test, verbose,
         result["parameters"] = parameters
     if return_estimator:
         result["estimator"] = estimator
+        
     return result
 
 
@@ -391,12 +402,13 @@ def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=No
             error_score=error_score)
         for train, test in cv.split(X, y, groups))
 
+    # results is a list of dictonaries
     results = _aggregate_score_dicts(results)
-
     ret = {}
     ret['fit_time'] = results['fit_time']
     ret['score_time'] = results['score_time']
 
+    # results['test_scores'] is a list of dictionaries
     test_scores = _aggregate_score_dicts(results['test_scores'])
     if return_train_score:
         train_scores = _aggregate_score_dicts(results['train_scores'])
@@ -413,107 +425,98 @@ def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=No
 
     return ret
 
-#%%
-
-class SingleInstanceGather:
 
 
-    def __init__(self):
-        return None
+def bags_2_si_generator(bags, bag_labels, sparse=False):
+    """Convert a n x (m x p) array of bag instances into a k x p array of
+    instances. n is the number of bags, and m is the number of instances within
+    each bag. m can vary per bag. k is the total number of instances within
+    all bags. k = sum (m for bag in n). p is the feature space of each instance
+    inputs
+    -------
+    bags : (iterable) containing bags of shape (m x p) sparse arrays
+    bag_labels : (iterable) containing labels assocaited with each bag. Labels
+        are expanded and each instance within a bag inherits the label of the
+        bag
+    sparse : (bool) if True, the output instances are left as a sparse array.
+        Some sklearn estimators can handle sparse feature inputs
+    output
+    -------
+    instances, labels : (generator) """
 
+    for bag, label in zip(bags, bag_labels):
+        # Unpack bag into instances
 
-    @staticmethod
-    def bags_2_si_generator(bags, bag_labels, sparse=False):
-        """Convert a n x (m x p) array of bag instances into a k x p array of
-        instances. n is the number of bags, and m is the number of instances within
-        each bag. m can vary per bag. k is the total number of instances within
-        all bags. k = sum (m for bag in n). p is the feature space of each instance
-        inputs
-        -------
-        bags : (iterable) containing bags of shape (m x p) sparse arrays
-        bag_labels : (iterable) containing labels assocaited with each bag. Labels
-            are expanded and each instance within a bag inherits the label of the
-            bag
-        sparse : (bool) if True, the output instances are left as a sparse array.
-            Some sklearn estimators can handle sparse feature inputs
-        output
-        -------
-        instances, labels : (generator) """
-
-        for bag, label in zip(bags, bag_labels):
-            # Unpack bag into instances
-
-            if sparse and isinstance(bag, csr_matrix):
-                # Keep instances as sparse array
-                instances = bag # Sparse array
-            elif sparse and not isinstance(bag, csr_matrix):
-                # Convert instances to csr matrix if sparse=True and the bag
-                # is not currently a csr matrix
-                instances = csr_matrix(bag) # Dense array
-            elif not sparse and isinstance(bag, csr_matrix):
-                # Convert csr_array to dense array
-                instances = bag.toarray()
-            elif not sparse and not isinstance(bag, csr_matrix):
-                # Keep as dense array
-                instances = bag # Dense array
-            else:
-                msg=('bags must be sparse array (scipy.sparse.csr_matrix) or' +
-                ' dense array (np.array). Got type {}')
-                raise TypeError(msg.format(type(bag)))
-
-            labels = np.array([label].__mul__(instances.shape[0]))
-
-            yield instances, labels
-
-
-    @classmethod
-    def bags_2_si(cls, bags, bag_labels, sparse=False):
-        """Convert a n x (m x p) array of bag instances into a k x p array of
-        instances. n is the number of bags, and m is the number of instances within
-        each bag. m can vary per bag. k is the total number of instances within
-        all bags. k = sum (m for bag in n). p is the feature space of each instance
-        inputs
-        -------
-        bags : (iterable) containing bags of shape (m x p) sparse arrays
-        bag_labels : (iterable) containing labels assocaited with each bag. Labels
-            are expanded and each instance within a bag inherits the label of the
-            bag
-        sparse : (bool) if True, the output instances are left as a sparse array.
-            Some sklearn estimators can handle sparse feature inputs
-        output
-        -------
-        instances, labels : (np.array) or (scipy.sparse.csr.csr_matrix)
-        depending on 'sparse'"""
-
-        # Initialize generator over bags
-        bag_iterator = cls.bags_2_si_generator(bags,
-                                               bag_labels,
-                                               sparse=sparse)
-
-        # Initialize datasets
-        instances, labels = [], []
-
-        # Gather datasets
-        for part_instances, part_labels in bag_iterator:
-
-            instances.append(part_instances)
-            labels.append(part_labels)
-
-        # Flatten into otuput shape - [k x p] instances and [k] labels
-        if sparse:
-            # Row-stack sparse arrays into a sinlge  k x p sparse array
-            instances = vstack(instances)
-            labels = np.concatenate(labels)
+        if sparse and isinstance(bag, csr_matrix):
+            # Keep instances as sparse array
+            instances = bag # Sparse array
+        elif sparse and not isinstance(bag, csr_matrix):
+            # Convert instances to csr matrix if sparse=True and the bag
+            # is not currently a csr matrix
+            instances = csr_matrix(bag) # Dense array
+        elif not sparse and isinstance(bag, csr_matrix):
+            # Convert csr_array to dense array
+            instances = bag.toarray()
+        elif not sparse and not isinstance(bag, csr_matrix):
+            # Keep as dense array
+            instances = bag # Dense array
         else:
-            # Row-concatenate dense arrays into a single k x p array
-            instances = np.concatenate(instances)
-            labels = np.concatenate(labels)
+            msg=('bags must be sparse array (scipy.sparse.csr_matrix) or' +
+            ' dense array (np.array). Got type {}')
+            raise TypeError(msg.format(type(bag)))
 
-        return instances, labels
+        labels = np.array([label].__mul__(instances.shape[0]))
+
+        yield instances, labels
+
+
+def bags_2_si( bags, bag_labels, sparse=False):
+    """Convert a n x (m x p) array of bag instances into a k x p array of
+    instances. n is the number of bags, and m is the number of instances within
+    each bag. m can vary per bag. k is the total number of instances within
+    all bags. k = sum (m for bag in n). p is the feature space of each instance
+    inputs
+    -------
+    bags : (iterable) containing bags of shape (m x p) sparse arrays
+    bag_labels : (iterable) containing labels assocaited with each bag. Labels
+        are expanded and each instance within a bag inherits the label of the
+        bag
+    sparse : (bool) if True, the output instances are left as a sparse array.
+        Some sklearn estimators can handle sparse feature inputs
+    output
+    -------
+    instances, labels : (np.array) or (scipy.sparse.csr.csr_matrix)
+    depending on 'sparse'"""
+
+    # Initialize generator over bags
+    bag_iterator = bags_2_si_generator(bags,
+                                       bag_labels,
+                                       sparse=sparse)
+
+    # Initialize datasets
+    instances, labels = [], []
+
+    # Gather datasets
+    for part_instances, part_labels in bag_iterator:
+
+        instances.append(part_instances)
+        labels.append(part_labels)
+
+    # Flatten into otuput shape - [k x p] instances and [k] labels
+    if sparse:
+        # Row-stack sparse arrays into a sinlge  k x p sparse array
+        instances = vstack(instances)
+        labels = np.concatenate(labels)
+    else:
+        # Row-concatenate dense arrays into a single k x p array
+        instances = np.concatenate(instances)
+        labels = np.concatenate(labels)
+
+    return instances, labels
 
 
 
-class BagScorer(SingleInstanceGather):
+class BagScorer:
     """This is a custom scoring object for use with sklearn cross validation
     model evaluation. This includes cross_validate, cross_val_score, and
     GridSearchCV
@@ -534,6 +537,11 @@ class BagScorer(SingleInstanceGather):
         """This class should NOT be passed directly as the 'scorer' argument
         to cross_validate, cross_val_score, or GridSearchCV without
         initializing the class
+        
+        When scorer is a dictionary of values, raise an error
+        When the scorer is a callable with method _score_func then return
+            the score from this scoring metric
+        
         inputs
         ------
         scorer : (#TODO)
@@ -599,11 +607,12 @@ class BagScorer(SingleInstanceGather):
         done as a separate task from scoring
         inputs
         -------
-        X_train : (iterable) is validation data. It has to be an iterable of bags,
+        estimator: ()
+        X_train: (iterable) is validation data. It has to be an iterable of bags,
         for example an [n x (m x p)] array of bag instances. n is the number
         of bags, and m is the number of instances within each bag.
-        y_train : () is the ground truth target for X
-        **fit_params : ()
+        y_train: () is the ground truth target for X
+        **fit_params: ()
         outputs
         ------
         estimator : fitted estimator"""
@@ -614,10 +623,7 @@ class BagScorer(SingleInstanceGather):
             raise ValueError(msg)
 
         # Find SI data
-        SI_examples, SI_labels = self.bags_2_si(X_train, y_train, self.sparse)
-
-        # Fit on SI data
-        estimator.fit(SI_examples, SI_labels)
+        SI_examples, SI_labels = bags_2_si(X_train, y_train, self.sparse)
 
         if y_train is None:
             # This should not happen - see ValueError
@@ -628,27 +634,35 @@ class BagScorer(SingleInstanceGather):
         return estimator # Fitted estimator
 
     @staticmethod
-    def reduce_bag_label(predictions, method='mode'):
-        """Determine the bag label from the single-instance classifications of its
-        members. 'mode' returns the most frequently occuring bag label
+    def reduce_bag_label(predictions, method: str = 'mode') -> Union[str, int]:
+        """Determine the bag label from the single-instance classifications of 
+        its members. 'mode' returns the most frequently occuring bag label
         inputs
         -------
         predictions : (iterable) of labels
-        method : (str) 'mode' is only supported
+        method : (str) 'mode' is only supported.
+            TODO support based on label weights
         outputs
         -------
         label : (str / int) of most common prediction"""
 
         if method == 'mode':
             label, count = Counter(predictions).most_common(1)[0]
+        else:
+            method_error = "only 'mode' is supported as a reduction method." \
+                "Got {}".format(method)
+            raise ValueError(method_error)
 
         return label
 
 
-    def predict_bags(self, estimator, bags, method='mode'):
+    def predict_bags(self, estimator, bags, method: str ='mode'):
         """
         inputs
         ------
+        estimator: ()
+        bags: ()
+        method: (string)
         outputs
         -------"""
 

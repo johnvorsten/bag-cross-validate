@@ -3,3 +3,6 @@ dist/*
 build/*
 *.egg*
 **/__pycache__/**
+
+# Other files
+*.drawio
