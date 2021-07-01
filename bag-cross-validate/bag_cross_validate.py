@@ -151,17 +151,15 @@ def _fit_and_score(estimator, X, y, scorer, train, test, verbose,
     X_train, y_train = _safe_split(estimator, X, y, train)
     X_test, y_test = _safe_split(estimator, X, y, test, train)
 
-    """Let the custom bag scorer handle fitting of the estimator"""
+    # Fit the estimator
+    # Let the custom bag scorer handle fitting of the estimator
     result = {}
     try:
-        if y_train is None:
-            # X_train is an iterabls of bags NOT single-instance examples
-            estimator = scorer.estimator_fit(estimator, X_train,
-                                             y_train=y_train, **fit_params)
-        else:
-            # X_train, y_train are iterabls of bags NOT single-instance examples
-            estimator = scorer.estimator_fit(estimator, X_train,
-                                             y_train=y_train, **fit_params)
+        estimator = _BagScorer_estimator_fit(estimator, 
+                                             X_train, 
+                                             y_train, 
+                                             scorer, 
+                                             **fit_params)
 
     except Exception as e:
         # Note fit time as time until error
@@ -232,6 +230,52 @@ def _fit_and_score(estimator, X, y, scorer, train, test, verbose,
         result["estimator"] = estimator
         
     return result
+
+
+def _BagScorer_estimator_fit(estimator, X_train, y_train, scorer, **fit_params):
+    
+    generic_error = ("Invalid scorer object. Should be BagScorer or dictionary"
+                     " with structure {'key':BagScorer} object. Got {scorer!r}")
+    
+    if y_train is None:
+        # X_train is an iterabls of bags NOT single-instance examples
+        if isinstance(scorer, BagScorer):
+            # Depreciated
+            estimator = scorer.estimator_fit(estimator, 
+                                             X_train,
+                                             y_train=None, 
+                                             **fit_params)
+        elif isinstance(scorer, dict):
+            # It is possible to pass a dictionary of scorers
+            for metric, bagScorer in scorer.items():
+                if isinstance(bagScorer, BagScorer):
+                    estimator = bagScorer.estimator_fit(estimator, 
+                                                        X_train, 
+                                                        y_train=None, 
+                                                        **fit_params)
+        else:
+            raise ValueError(generic_error)
+        
+    else:
+        # X_train, y_train are iterabls of bags NOT single-instance examples
+        if isinstance(scorer, BagScorer):
+            # Depreciated
+            estimator = scorer.estimator_fit(estimator, 
+                                             X_train,
+                                             y_train, 
+                                             **fit_params)
+        elif isinstance(scorer, dict):
+            # It is possible to pass a dictionary of scorers
+            for metric, bagScorer in scorer.items():
+                if isinstance(bagScorer, BagScorer):
+                    estimator = bagScorer.estimator_fit(estimator, 
+                                                        X_train, 
+                                                        y_train, 
+                                                        **fit_params)
+        else:
+            raise ValueError(generic_error)
+        
+    return estimator
 
 
 @_deprecate_positional_args
@@ -388,7 +432,7 @@ def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=No
     X, y, groups = indexable(X, y, groups)
 
     cv = check_cv(cv, y, classifier=is_classifier(estimator))
-    scorers, _ = _check_multimetric_scoring(estimator, scoring=scoring)
+    scorers = _check_multimetric_scoring(estimator, scoring=scoring)
 
     # We clone the estimator to make sure that all the folds are
     # independent, and that it is pickle-able.
@@ -592,7 +636,7 @@ class BagScorer:
         # Calculate metrics - API call to scorer function
         if hasattr(self.scorer, '_score_func'):
             kwargs = self.scorer._kwargs
-            ret = self.scorer._score_func(y, bag_predictions, kwargs)
+            ret = self.scorer._score_func(y, bag_predictions, **kwargs)
 
         else:
             msg=('scorer object must have callable "_score_func" with a'+
@@ -600,7 +644,7 @@ class BagScorer:
             raise ValueError(msg)
 
         return ret
-
+    
 
     def estimator_fit(self, estimator, X_train, y_train=None, **fit_params):
         """The sklearn _fit_and_score method requires estimator fitting to be
@@ -655,8 +699,8 @@ class BagScorer:
 
         return label
 
-
-    def predict_bags(self, estimator, bags, method: str ='mode'):
+    @classmethod
+    def predict_bags(cls, estimator, bags, method: str ='mode'):
         """
         inputs
         ------
@@ -671,7 +715,7 @@ class BagScorer:
         for bag in bags:
             # Predict labels in bag
             si_predictions = estimator.predict(bag)
-            bag_prediction = self.reduce_bag_label(si_predictions, method=method)
+            bag_prediction = cls.reduce_bag_label(si_predictions, method=method)
             bag_predictions.append(bag_prediction)
 
         return bag_predictions

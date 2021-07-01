@@ -63,6 +63,8 @@ class TestBagScorer(unittest.TestCase):
         # Split dummy dataset dataset
         rs = ShuffleSplit(n_splits=1, test_size=0.2, train_size=0.8)
         train_index, test_index = next(rs.split(bags, labels))
+        train_bags, train_labels = bags[train_index], labels[train_index]
+        test_bags, test_labels = bags[test_index], labels[test_index]
         self.train_bags, self.train_labels = bags[train_index], labels[train_index]
         self.test_bags, self.test_labels = bags[test_index], labels[test_index]
         
@@ -148,7 +150,7 @@ class TestBagScorer(unittest.TestCase):
         accuracy_scorer = make_scorer(accuracy_score, normalize='weighted')
         bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
 
-        self.assertIn('__call__', bagAccScorer.__dict__.keys())
+        self.assertTrue(callable(bagAccScorer), msg="BagScorer must be callable")
         
         return None
 
@@ -173,7 +175,8 @@ class TestBagScorer(unittest.TestCase):
         
         # Generate a scoring metric for the bag scorer
         accuracy_scorer = make_scorer(accuracy_score)
-        hasattr(accuracy_scorer, '_score_func') # True
+        self.assertTrue(hasattr(accuracy_scorer, '_score_func'), 
+                        msg='accuracy scorer must have _score_function method') 
 
         # Generate some data
         train_bags, train_labels = self.train_bags, self.train_labels
@@ -228,7 +231,9 @@ class TestBagScorer(unittest.TestCase):
 
         # Define an estimator
         dumb = DummyClassifier(strategy='constant', constant=1)
-        train_accuracy_global = sum(train_labels) / len(train_labels)
+        
+        # Calculate metrics manually
+        expected_accuracy = sum(train_labels) / len(train_labels)
         kf = KFold(n_splits = 4)
         accuracies = []
         for train_index, test_index in kf.split(train_labels):
@@ -241,10 +246,14 @@ class TestBagScorer(unittest.TestCase):
 
         # Custom scorer
         bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
+        scorer = {'bag-accuracy-scorer': bagAccScorer,
+                   }
 
         # Test cross_validate_bag
+        # Res is a dictonary of lists {'fit_time':[1,2,3],
+        # 'test_bag-accuracy-scorer':[0.1,0.2,0.3]}
         res = cross_validate_bag(dumb, train_bags, train_labels,
-                             cv=4, scoring=bagAccScorer,
+                             cv=4, scoring=scorer,
                              n_jobs=1, verbose=0, fit_params=None,
                              pre_dispatch='2*n_jobs', return_train_score=False,
                              return_estimator=False, error_score='raise')
@@ -255,8 +264,18 @@ class TestBagScorer(unittest.TestCase):
         is not divisible by the number of splits)
         This is only true because the dummy classifier always predicts 1
         If the splits are not equal size then they will be close to equal"""
-
-        self.assertAlmostEqual(np.mean(res['test_score']), train_accuracy_global, 3)
+        self.assertAlmostEqual(np.mean(res['test_bag-accuracy-scorer']), 
+                               expected_accuracy, 3)
+        # Just check the mean also LOL
+        self.assertEqual(np.mean(res['test_bag-accuracy-scorer']), 
+                         expected_accuracy)
+        # 4 Crossvalidation splits
+        self.assertTrue(len(res['test_bag-accuracy-scorer']) == 4)
+        # Assert result has dictionary values
+        self.assertIn('fit_time', res.keys())
+        self.assertIn('score_time', res.keys())
+        
+        return None
 
 
     def test_fit_and_score(self):
@@ -270,7 +289,7 @@ class TestBagScorer(unittest.TestCase):
         # Test custom scorer
         bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
 
-        """_fit_and_score testing"""
+        # _fit_and_score testing
         X = self.train_bags
         y = self.train_labels
         scoring = {'bag-accuracy-scorer': bagAccScorer,
@@ -296,6 +315,15 @@ class TestBagScorer(unittest.TestCase):
         # independent, and that it is pickle-able.
         parallel = Parallel(n_jobs=n_jobs, verbose=verbose,
                             pre_dispatch=pre_dispatch)
+        
+        # Scores is a list of dictonaries
+        """When scoring is a dictionary, the returned result looks like
+        [{'test_scores': {'bag-accuracy-scorer': 0.5185185185185185},
+          'fit_time': 0.0,
+          'score_time': 0.0},
+         {'test_scores': {'bag-accuracy-scorer': 0.5185185185185185},
+          'fit_time': 0.0,
+          'score_time': 0.0}, ... ]"""
         scores = parallel(
             delayed(_fit_and_score)(
                 clone(estimator), X, y, scorers, train, test, verbose, parameters,
@@ -305,9 +333,16 @@ class TestBagScorer(unittest.TestCase):
             for train, test in cv.split(X, y, groups))
         
         for score in scores:
-            print(score) 
-            self.assertEqual(score, [None]) # TODO Add assert
-
+            bag_scoring_metric = score['test_scores']
+            self.assertLessEqual(bag_scoring_metric['bag-accuracy-scorer'], 1)
+            self.assertGreaterEqual(bag_scoring_metric['bag-accuracy-scorer'], 0)
+            
+            fit_time = score['fit_time']
+            self.assertIsInstance(fit_time, float)
+            
+            score_time = score['score_time']
+            self.assertIsInstance(score_time, float)
+        
         return None
     
     
@@ -325,7 +360,7 @@ class TestBagScorer(unittest.TestCase):
         # Rename for easier parameters
         X = self.train_bags
         y = self.train_labels
-        scoring = {'bag-scorer': bagAccScorer}
+        scoring = {'bag-scorer':bagAccScorer}
         estimator = dumb
         groups = None
         cv = 3
@@ -333,9 +368,9 @@ class TestBagScorer(unittest.TestCase):
         verbose=0
         pre_dispatch=6
         fit_params=None
-        return_estimator=None
+        return_estimator=True
         error_score='raise'
-        return_train_score=None
+        return_train_score=True
         parameters=None
         
         # Test _fit_and_score method
@@ -350,17 +385,18 @@ class TestBagScorer(unittest.TestCase):
         # Generate scores using BagScorer
         scores = _fit_and_score(
             clone(estimator), X, y, scorers, train, test, verbose, parameters,
-            fit_params, return_train_score=return_train_score,
-            return_times=True, return_estimator=return_estimator,
+            fit_params, 
+            return_train_score=return_train_score,
+            return_times=True, 
+            return_estimator=return_estimator,
+            return_n_test_samples=False,
             error_score=error_score)
         
         # Returned dictionary contains keys
         self.assertIn('train_scores', scores.keys())
         self.assertIn('test_scores', scores.keys())
-        self.assertIn('n_test_samples', scores.keys())
         self.assertIn('fit_time', scores.keys())
         self.assertIn('score_time', scores.keys())
-        self.assertIn('parameters', scores.keys())
         self.assertIn('estimator', scores.keys())
         
         return None
@@ -385,8 +421,8 @@ if __name__ == '__main__':
     #     'test_scorer_signature',
     #     ]
     
-    # # Run specific test methods... (altenative method)
+    # Run specific test methods... (altenative method)
     # suite = unittest.TestSuite()
-    # suite.addTest(TestBagScorer('test_BagScorer'))
+    # suite.addTest(TestBagScorer('test_fit_and_score_return_dict'))
     # runner = unittest.TextTestRunner()
     # runner.run(suite)
