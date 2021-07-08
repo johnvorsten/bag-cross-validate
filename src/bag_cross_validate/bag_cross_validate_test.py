@@ -7,6 +7,7 @@ Created on Sat Jun 27 15:18:53 2020
 
 # Python imports
 import sys, os
+import unittest
 
 # Sklearn imports
 from sklearn.naive_bayes import ComplementNB
@@ -22,6 +23,7 @@ from sklearn.utils import indexable
 # Third party imports
 from joblib import Parallel, delayed
 import numpy as np
+from scipy.sparse import csr_matrix
 
 # Local imports
 from bag_cross_validate import (BagScorer, 
@@ -31,8 +33,6 @@ from bag_cross_validate import (BagScorer,
 
 
 #%%
-
-import unittest
 
 class TestBagScorer(unittest.TestCase):
     
@@ -400,6 +400,115 @@ class TestBagScorer(unittest.TestCase):
         self.assertIn('estimator', scores.keys())
         
         return None
+
+
+
+class TestCrossValidation(unittest.TestCase):
+    
+    def setUp(self):
+        """Generate some dummy data
+        Create bags and single-instance data
+        A set of bags have a shape [n x (m x p)], and can be through of as an
+        array of bag instances.
+        n is the number of bags
+        m is the number of instances within each bag (this can vary between bags)
+        p is the feature space of each instance"""
+        n_bags = 100
+        m_instances_range = [5,10] # Dynamic number instance per bag
+        p = 5
+        bags = []
+        # 25% negative class, 75% positive class
+        # Bags are created with random data, of shape (n, (m,p))
+        labels = np.concatenate((np.ones(int(n_bags*0.5)),
+                                 np.zeros(int(n_bags*(1-0.5))),
+                                 ))
+        for n in range(0, n_bags):
+            m_instances = np.random.randint(m_instances_range[0], 
+                                            m_instances_range[1],)
+            bag = np.random.randint(low=0, high=2, size=(1, m_instances, p))
+            bag_sparse = csr_matrix(bag)
+            
+            bags.append(bag)
+        bags = np.array(bags)
+
+        # Split dummy dataset dataset
+        rs = ShuffleSplit(n_splits=1, test_size=0.2, train_size=0.8)
+        train_index, test_index = next(rs.split(bags, labels))
+        train_bags, train_labels = bags[train_index], labels[train_index]
+        test_bags, test_labels = bags[test_index], labels[test_index]
+        self.train_bags, self.train_labels = bags[train_index], labels[train_index]
+        self.test_bags, self.test_labels = bags[test_index], labels[test_index]
+        
+        return None
+    
+    
+    def test_bag_cross_validate_sparse(self):
+        
+        # Scoring
+        accuracy_scorer = make_scorer(accuracy_score, normalize='weighted')
+
+        # Dummy data
+        train_bags, train_labels = self.train_bags, self.train_labels
+        test_bags, test_labels = self.test_bags, self.test_labels
+
+        # Define an estimator
+        dumb = DummyClassifier(strategy='constant', constant=1)
+        
+        # Calculate metrics manually
+        expected_accuracy = sum(train_labels) / len(train_labels)
+        kf = KFold(n_splits = 4)
+        accuracies = []
+        for train_index, test_index in kf.split(train_labels):
+            _fold = train_labels[test_index]
+            _acc = sum(_fold) / len(_fold)
+            print(sum(_fold))
+            accuracies.append(_acc)
+        print('Global Accuracy : ', sum(train_labels) / len(train_labels))
+        print('Averaged accuracies : ', np.mean(accuracies))
+
+        # Custom scorer
+        bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
+        scorer = {'bag-accuracy-scorer': bagAccScorer,
+                   }
+
+        # Test cross_validate_bag
+        # Res is a dictonary of lists {'fit_time':[1,2,3],
+        # 'test_bag-accuracy-scorer':[0.1,0.2,0.3]}
+        res = cross_validate_bag(dumb, train_bags, train_labels,
+                             cv=4, scoring=scorer,
+                             n_jobs=1, verbose=0, fit_params=None,
+                             pre_dispatch='2*n_jobs', return_train_score=False,
+                             return_estimator=False, error_score='raise')
+
+        """The arithmetic mean of all accuracy predictions should equal the
+        prediction accuracy of the training bags (At least if all splits are
+        equal size -> Which is not true if the number of training instances
+        is not divisible by the number of splits)
+        This is only true because the dummy classifier always predicts 1
+        If the splits are not equal size then they will be close to equal"""
+        self.assertAlmostEqual(np.mean(res['test_bag-accuracy-scorer']), 
+                               expected_accuracy, 3)
+        # Just check the mean also LOL
+        self.assertEqual(np.mean(res['test_bag-accuracy-scorer']), 
+                         expected_accuracy)
+        # 4 Crossvalidation splits
+        self.assertTrue(len(res['test_bag-accuracy-scorer']) == 4)
+        # Assert result has dictionary values
+        self.assertIn('fit_time', res.keys())
+        self.assertIn('score_time', res.keys())
+        
+        return None
+
+
+
+
+
+
+
+
+
+
+
 
 #%%
 
