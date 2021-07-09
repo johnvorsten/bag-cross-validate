@@ -50,67 +50,67 @@ def _fit_and_score(estimator, X, y, scorer, train, test, verbose,
     """Fit estimator and compute scores for a given dataset split.
     Parameters
     ----------
-    estimator : estimator object implementing 'fit'
+    estimator: estimator object implementing 'fit'
         The object to use to fit the data.
-    X : array-like of shape (n_samples, n_features)
+    X: array-like of shape (n_samples, n_features)
         The data to fit.
-    y : array-like of shape (n_samples,) or (n_samples, n_outputs) or None
+    y: array-like of shape (n_samples,) or (n_samples, n_outputs) or None
         The target variable to try to predict in the case of
         supervised learning.
-    scorer : A single callable or dict mapping scorer name to the callable
+    scorer: A single callable or dict mapping scorer name to the callable
         If it is a single callable, the return value for ``train_scores`` and
         ``test_scores`` is a single float.
         For a dict, it should be one mapping the scorer name to the scorer
         callable object / function.
         The callable object / fn should have signature
         ``scorer(estimator, X, y)``.
-    train : array-like of shape (n_train_samples,)
+    train: array-like of shape (n_train_samples,)
         Indices of training samples.
-    test : array-like of shape (n_test_samples,)
+    test: array-like of shape (n_test_samples,)
         Indices of test samples.
-    verbose : int
+    verbose: int
         The verbosity level.
-    error_score : 'raise' or numeric, default=np.nan
+    error_score: 'raise' or numeric, default=np.nan
         Value to assign to the score if an error occurs in estimator fitting.
         If set to 'raise', the error is raised.
         If a numeric value is given, FitFailedWarning is raised. This parameter
         does not affect the refit step, which will always raise the error.
-    parameters : dict or None
+    parameters: dict or None
         Parameters to be set on the estimator.
-    fit_params : dict or None
+    fit_params: dict or None
         Parameters that will be passed to ``estimator.fit``.
-    return_train_score : bool, default=False
+    return_train_score: bool, default=False
         Compute and return score on training set.
-    return_parameters : bool, default=False
+    return_parameters: bool, default=False
         Return parameters that has been used for the estimator.
-    split_progress : list or tuple, optional, default: None
+    split_progress: list or tuple, optional, default: None
         A list or tuple of format (<current_split_id>, <total_num_of_splits>)
-    candidate_progress : list or tuple, optional, default: None
+    candidate_progress: list or tuple, optional, default: None
         A list or tuple of format
         (<current_candidate_id>, <total_number_of_candidates>)
-    return_n_test_samples : bool, default=False
+    return_n_test_samples: bool, default=False
         Whether to return the ``n_test_samples``
-    return_times : bool, default=False
+    return_times: bool, default=False
         Whether to return the fit/score times.
-    return_estimator : bool, default=False
+    return_estimator: bool, default=False
         Whether to return the fitted estimator.
     Returns
     -------
-    result : dict with the following attributes
-        train_scores : dict of scorer name -> float
+    result: dict with the following attributes
+        train_scores: dict of scorer name -> float
             Score on training set (for all the scorers),
             returned only if `return_train_score` is `True`.
-        test_scores : dict of scorer name -> float
+        test_scores: dict of scorer name -> float
             Score on testing set (for all the scorers).
-        n_test_samples : int
+        n_test_samples: int
             Number of test samples.
-        fit_time : float
+        fit_time: float
             Time spent for fitting in seconds.
-        score_time : float
+        score_time: float
             Time spent for scoring in seconds.
-        parameters : dict or None
+        parameters: dict or None
             The parameters that have been evaluated.
-        estimator : estimator object
+        estimator: estimator object
             The fitted estimator.
     """
     progress_msg = ""
@@ -284,22 +284,22 @@ def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=No
                    pre_dispatch='2*n_jobs', return_train_score=False,
                    return_estimator=False, error_score=np.nan):
     """Evaluate metric(s) by cross-validation and also record fit/score times.
-    Read more in the :ref:`User Guide <multimetric_cross_validation>`.
+    Read more in the:ref:`User Guide <multimetric_cross_validation>`.
     Parameters
     ----------
-    estimator : estimator object implementing 'fit'
+    estimator: estimator object implementing 'fit'
         The object to use to fit the data.
-    X : array-like of shape (n_samples, n_features)
+    X: array-like of shape (n_samples, n_features)
         The data to fit. Can be for example a list, or an array.
-    y : array-like of shape (n_samples,) or (n_samples, n_outputs), \
+    y: array-like of shape (n_samples,) or (n_samples, n_outputs), \
             default=None
         The target variable to try to predict in the case of
         supervised learning.
-    groups : array-like of shape (n_samples,), default=None
+    groups: array-like of shape (n_samples,), default=None
         Group labels for the samples used while splitting the dataset into
-        train/test set. Only used in conjunction with a "Group" :term:`cv`
-        instance (e.g., :class:`GroupKFold`).
-    scoring : str, callable, list/tuple, or dict, default=None
+        train/test set. Only used in conjunction with a "Group":term:`cv`
+        instance (e.g.,:class:`GroupKFold`).
+    scoring: str, callable, list/tuple, or dict, default=None
         A single str (see :ref:`scoring_parameter`) or a callable
         (see :ref:`scoring`) to evaluate the predictions on the test set.
         For evaluating multiple metrics, either give a list of (unique) strings
@@ -309,7 +309,7 @@ def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=No
         into multiple scorers that return one value each.
         See :ref:`multimetric_grid_search` for an example.
         If None, the estimator's score method is used.
-    cv : int, cross-validation generator or an iterable, default=None
+    cv: int, cross-validation generator or an iterable, default=None
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
         - None, to use the default 5-fold cross validation,
@@ -323,16 +323,16 @@ def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=No
         cross-validation strategies that can be used here.
         .. versionchanged:: 0.22
             ``cv`` default value if None changed from 3-fold to 5-fold.
-    n_jobs : int, default=None
+    n_jobs: int, default=None
         The number of CPUs to use to do the computation.
         ``None`` means 1 unless in a :obj:`joblib.parallel_backend` context.
         ``-1`` means using all processors. See :term:`Glossary <n_jobs>`
         for more details.
-    verbose : int, default=0
+    verbose: int, default=0
         The verbosity level.
-    fit_params : dict, default=None
+    fit_params: dict, default=None
         Parameters to pass to the fit method of the estimator.
-    pre_dispatch : int or str, default='2*n_jobs'
+    pre_dispatch: int or str, default='2*n_jobs'
         Controls the number of jobs that get dispatched during parallel
         execution. Reducing this number can be useful to avoid an
         explosion of memory consumption when more jobs get dispatched
@@ -345,7 +345,7 @@ def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=No
               spawned
             - A str, giving an expression as a function of n_jobs,
               as in '2*n_jobs'
-    return_train_score : bool, default=False
+    return_train_score: bool, default=False
         Whether to include train scores.
         Computing training scores is used to get insights on how different
         parameter settings impact the overfitting/underfitting trade-off.
@@ -355,10 +355,10 @@ def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=No
         .. versionadded:: 0.19
         .. versionchanged:: 0.21
             Default value was changed from ``True`` to ``False``
-    return_estimator : bool, default=False
+    return_estimator: bool, default=False
         Whether to return the estimators fitted on each split.
         .. versionadded:: 0.20
-    error_score : 'raise' or numeric
+    error_score: 'raise' or numeric
         Value to assign to the score if an error occurs in estimator fitting.
         If set to 'raise', the error is raised.
         If a numeric value is given, FitFailedWarning is raised. This parameter
@@ -366,7 +366,7 @@ def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=No
         .. versionadded:: 0.20
     Returns
     -------
-    scores : dict of float arrays of shape (n_splits,)
+    scores: dict of float arrays of shape (n_splits,)
         Array of scores of the estimator for each run of the cross validation.
         A dict of arrays containing the score/time arrays for each scorer is
         returned. The possible keys for this ``dict`` are:
@@ -471,37 +471,37 @@ def cross_validate_bag(estimator, X, y=None, *, groups=None, scoring=None, cv=No
 
 
 
-def bags_2_si_generator(bags, bag_labels, sparse=False):
+def bags_2_si_generator(bags, bag_labels, sparse_input=False):
     """Convert a n x (m x p) array of bag instances into a k x p array of
     instances. n is the number of bags, and m is the number of instances within
     each bag. m can vary per bag. k is the total number of instances within
     all bags. k = sum (m for bag in n). p is the feature space of each instance
     inputs
     -------
-    bags : (iterable) containing bags of shape (m x p) sparse arrays
-    bag_labels : (iterable) containing labels assocaited with each bag. Labels
+    bags: (iterable) containing bags of shape (m x p) sparse arrays
+    bag_labels: (iterable) containing labels assocaited with each bag. Labels
         are expanded and each instance within a bag inherits the label of the
         bag
-    sparse : (bool) if True, the output instances are left as a sparse array.
+    sparse_input: (bool) if True, the output instances are left as a sparse array.
         Some sklearn estimators can handle sparse feature inputs
     output
     -------
-    instances, labels : (generator) """
+    instances, labels: (generator) """
 
     for bag, label in zip(bags, bag_labels):
         # Unpack bag into instances
 
-        if sparse and isinstance(bag, csr_matrix):
+        if sparse_input and isinstance(bag, csr_matrix):
             # Keep instances as sparse array
             instances = bag # Sparse array
-        elif sparse and not isinstance(bag, csr_matrix):
+        elif sparse_input and not isinstance(bag, csr_matrix):
             # Convert instances to csr matrix if sparse=True and the bag
             # is not currently a csr matrix
             instances = csr_matrix(bag) # Dense array
-        elif not sparse and isinstance(bag, csr_matrix):
+        elif not sparse_input and isinstance(bag, csr_matrix):
             # Convert csr_array to dense array
             instances = bag.toarray()
-        elif not sparse and not isinstance(bag, csr_matrix):
+        elif not sparse_input and not isinstance(bag, csr_matrix):
             # Keep as dense array
             instances = bag # Dense array
         else:
@@ -514,28 +514,28 @@ def bags_2_si_generator(bags, bag_labels, sparse=False):
         yield instances, labels
 
 
-def bags_2_si( bags, bag_labels, sparse=False):
+def bags_2_si( bags, bag_labels, sparse_input=False):
     """Convert a n x (m x p) array of bag instances into a k x p array of
     instances. n is the number of bags, and m is the number of instances within
     each bag. m can vary per bag. k is the total number of instances within
     all bags. k = sum (m for bag in n). p is the feature space of each instance
     inputs
     -------
-    bags : (iterable) containing bags of shape (m x p) sparse arrays
-    bag_labels : (iterable) containing labels assocaited with each bag. Labels
+    bags: (iterable) containing bags of shape (m x p) sparse arrays
+    bag_labels: (iterable) containing labels assocaited with each bag. Labels
         are expanded and each instance within a bag inherits the label of the
         bag
-    sparse : (bool) if True, the output instances are left as a sparse array.
+    sparse: (bool) if True, the output instances are left as a sparse array.
         Some sklearn estimators can handle sparse feature inputs
     output
     -------
-    instances, labels : (np.array) or (scipy.sparse.csr.csr_matrix)
+    instances, labels: (np.array) or (scipy.sparse.csr.csr_matrix)
     depending on 'sparse'"""
 
     # Initialize generator over bags
     bag_iterator = bags_2_si_generator(bags,
                                        bag_labels,
-                                       sparse=sparse)
+                                       sparse_input=sparse_input)
 
     # Initialize datasets
     instances, labels = [], []
@@ -547,7 +547,7 @@ def bags_2_si( bags, bag_labels, sparse=False):
         labels.append(part_labels)
 
     # Flatten into otuput shape - [k x p] instances and [k] labels
-    if sparse:
+    if sparse_input:
         # Row-stack sparse arrays into a sinlge  k x p sparse array
         instances = vstack(instances)
         labels = np.concatenate(labels)
@@ -577,7 +577,7 @@ class BagScorer:
     should be negated (more positive is better)
 
     """
-    def __init__(self, scorer, sparse=False):
+    def __init__(self, scorer, sparse_input=False):
         """This class should NOT be passed directly as the 'scorer' argument
         to cross_validate, cross_val_score, or GridSearchCV without
         initializing the class
@@ -588,11 +588,12 @@ class BagScorer:
         
         inputs
         ------
-        scorer : (#TODO)
-        sparse : (bool)"""
+        scorer: (#TODO)
+        sparse_input: (bool) if True, the output instances are left as a sparse array.
+        Some sklearn estimators can handle sparse feature inputs"""
 
         # Initialization parameters
-        self.sparse = sparse
+        self.sparse_input = sparse_input
 
         # Metric for scoring bags
         if isinstance(scorer, dict):
@@ -613,15 +614,15 @@ class BagScorer:
         """
         inputs
         -------
-        estimator : () the model that should be evaluated
-        X : (iterable) is validation data. It has to be an iterable of bags,
+        estimator: () the model that should be evaluated
+        X: (iterable) is validation data. It has to be an iterable of bags,
         for example an [n x (m x p)] array of bag instances. n is the number
         of bags, and m is the number of instances within each bag.
         p is the feature space of each instance
-        y : () is the ground truth target for X
+        y: () is the ground truth target for X
         outputs
         -------
-        score : (float) result of score of estimator on bags
+        score: (float) result of score of estimator on bags
         """
         # Initialize positional and keyword arguments
         X = positional_args[0] # Validation data (for predictions)
@@ -659,7 +660,7 @@ class BagScorer:
         **fit_params: ()
         outputs
         ------
-        estimator : fitted estimator"""
+        estimator: fitted estimator"""
 
         if y_train is None:
             msg=('Single Instance labels cannot be constructed from bags if' +
@@ -683,12 +684,12 @@ class BagScorer:
         its members. 'mode' returns the most frequently occuring bag label
         inputs
         -------
-        predictions : (iterable) of labels
-        method : (str) 'mode' is only supported.
+        predictions: (iterable) of labels
+        method: (str) 'mode' is only supported.
             TODO support based on label weights
         outputs
         -------
-        label : (str / int) of most common prediction"""
+        label: (str / int) of most common prediction"""
 
         if method == 'mode':
             label, count = Counter(predictions).most_common(1)[0]

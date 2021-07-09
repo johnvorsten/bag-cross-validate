@@ -19,6 +19,7 @@ from sklearn.base import is_classifier, clone
 from sklearn.metrics._scorer import check_scoring
 from sklearn.model_selection._split import check_cv
 from sklearn.utils import indexable
+from sklearn.neighbors import KNeighborsClassifier
 
 # Third party imports
 from joblib import Parallel, delayed
@@ -416,7 +417,7 @@ class TestCrossValidation(unittest.TestCase):
         n_bags = 100
         m_instances_range = [5,10] # Dynamic number instance per bag
         p = 5
-        bags = []
+        bags_sparse = []
         # 25% negative class, 75% positive class
         # Bags are created with random data, of shape (n, (m,p))
         labels = np.concatenate((np.ones(int(n_bags*0.5)),
@@ -425,19 +426,19 @@ class TestCrossValidation(unittest.TestCase):
         for n in range(0, n_bags):
             m_instances = np.random.randint(m_instances_range[0], 
                                             m_instances_range[1],)
-            bag = np.random.randint(low=0, high=2, size=(1, m_instances, p))
+            bag = np.random.randint(low=0, high=2, size=(m_instances, p))
             bag_sparse = csr_matrix(bag)
+            bags_sparse.append(bag_sparse)
             
-            bags.append(bag)
-        bags = np.array(bags)
+        bags_sparse = np.array(bags_sparse)
 
         # Split dummy dataset dataset
         rs = ShuffleSplit(n_splits=1, test_size=0.2, train_size=0.8)
-        train_index, test_index = next(rs.split(bags, labels))
-        train_bags, train_labels = bags[train_index], labels[train_index]
-        test_bags, test_labels = bags[test_index], labels[test_index]
-        self.train_bags, self.train_labels = bags[train_index], labels[train_index]
-        self.test_bags, self.test_labels = bags[test_index], labels[test_index]
+        train_index, test_index = next(rs.split(bags_sparse, labels))
+        train_bags, train_labels = bags_sparse[train_index], labels[train_index]
+        test_bags, test_labels = bags_sparse[test_index], labels[test_index]
+        self.train_bags, self.train_labels = bags_sparse[train_index], labels[train_index]
+        self.test_bags, self.test_labels = bags_sparse[test_index], labels[test_index]
         
         return None
     
@@ -452,45 +453,26 @@ class TestCrossValidation(unittest.TestCase):
         test_bags, test_labels = self.test_bags, self.test_labels
 
         # Define an estimator
-        dumb = DummyClassifier(strategy='constant', constant=1)
-        
-        # Calculate metrics manually
-        expected_accuracy = sum(train_labels) / len(train_labels)
-        kf = KFold(n_splits = 4)
-        accuracies = []
-        for train_index, test_index in kf.split(train_labels):
-            _fold = train_labels[test_index]
-            _acc = sum(_fold) / len(_fold)
-            print(sum(_fold))
-            accuracies.append(_acc)
-        print('Global Accuracy : ', sum(train_labels) / len(train_labels))
-        print('Averaged accuracies : ', np.mean(accuracies))
+        estimator = KNeighborsClassifier(n_neighbors=10, 
+                                         weights='uniform',
+                                         algorithm='ball_tree', 
+                                         n_jobs=4)
 
         # Custom scorer
-        bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
+        bagAccScorer = BagScorer(accuracy_scorer, input_sparse=True)
         scorer = {'bag-accuracy-scorer': bagAccScorer,
-                   }
+                  }
 
         # Test cross_validate_bag
         # Res is a dictonary of lists {'fit_time':[1,2,3],
         # 'test_bag-accuracy-scorer':[0.1,0.2,0.3]}
-        res = cross_validate_bag(dumb, train_bags, train_labels,
-                             cv=4, scoring=scorer,
-                             n_jobs=1, verbose=0, fit_params=None,
-                             pre_dispatch='2*n_jobs', return_train_score=False,
-                             return_estimator=False, error_score='raise')
+        res = cross_validate_bag(estimator, train_bags, train_labels,
+                                 cv=4, scoring=scorer,
+                                 n_jobs=1, verbose=0, fit_params=None,
+                                 pre_dispatch='2*n_jobs', return_train_score=False,
+                                 return_estimator=False, error_score='raise')
 
-        """The arithmetic mean of all accuracy predictions should equal the
-        prediction accuracy of the training bags (At least if all splits are
-        equal size -> Which is not true if the number of training instances
-        is not divisible by the number of splits)
-        This is only true because the dummy classifier always predicts 1
-        If the splits are not equal size then they will be close to equal"""
-        self.assertAlmostEqual(np.mean(res['test_bag-accuracy-scorer']), 
-                               expected_accuracy, 3)
-        # Just check the mean also LOL
-        self.assertEqual(np.mean(res['test_bag-accuracy-scorer']), 
-                         expected_accuracy)
+
         # 4 Crossvalidation splits
         self.assertTrue(len(res['test_bag-accuracy-scorer']) == 4)
         # Assert result has dictionary values
