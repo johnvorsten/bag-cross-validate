@@ -49,25 +49,23 @@ class TestBagScorer(unittest.TestCase):
         n_bags = 100
         m_instances = 5 # Static number of bags
         p = 5
-        bags = []
+        bags = np.empty(n_bags, dtype='object')
         # 25% negative class, 75% positive class
         # Bags are created with random data, of shape (n, (m,p))
         labels = np.concatenate((np.ones(int(n_bags*0.5)),
                                  np.zeros(int(n_bags*(1-0.5))),
                                  ))
-        for _ in range(n_bags):
-            _rand = np.random.rand(m_instances, p)
-            bag = np.where(_rand < 0.25, 1, 0)
-            bags.append(bag)
-        bags = np.array(bags)
+        for n in range(0, n_bags):
+            bag = np.random.randint(low=0, high=2, size=(m_instances, p))
+            bags[n] = bag
 
         # Split dummy dataset dataset
         rs = ShuffleSplit(n_splits=1, test_size=0.2, train_size=0.8)
         train_index, test_index = next(rs.split(bags, labels))
         train_bags, train_labels = bags[train_index], labels[train_index]
         test_bags, test_labels = bags[test_index], labels[test_index]
-        self.train_bags, self.train_labels = bags[train_index], labels[train_index]
-        self.test_bags, self.test_labels = bags[test_index], labels[test_index]
+        self.train_bags, self.train_labels = train_bags, train_labels
+        self.test_bags, self.test_labels = test_bags, test_labels
         
         return None
 
@@ -101,9 +99,9 @@ class TestBagScorer(unittest.TestCase):
         compNB = ComplementNB(alpha=1.0, fit_prior=True, class_prior=None, norm=False)
 
         # Test custom scorer
-        bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
-        bagPrecisionScorer = BagScorer(precision_scorer, sparse=True)
-        bagRecallScorer = BagScorer(recall_scorer, sparse=True)
+        bagAccScorer = BagScorer(accuracy_scorer, sparse_input=False)
+        bagPrecisionScorer = BagScorer(precision_scorer, sparse_input=False)
+        bagRecallScorer = BagScorer(recall_scorer, sparse_input=False)
         estimator = bagAccScorer.estimator_fit(compNB, train_bags, train_labels)
         
         # The estimator is the same for all instances...
@@ -149,7 +147,7 @@ class TestBagScorer(unittest.TestCase):
 
         # Test custom scorer
         accuracy_scorer = make_scorer(accuracy_score, normalize='weighted')
-        bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
+        bagAccScorer = BagScorer(accuracy_scorer, sparse_input=False)
 
         self.assertTrue(callable(bagAccScorer), msg="BagScorer must be callable")
         
@@ -202,7 +200,7 @@ class TestBagScorer(unittest.TestCase):
         dumb_accuracy_test = accuracy_score(SI_test_labels, pred_test)
 
         # Test custom scorer, with the same dummy estimator
-        bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
+        bagAccScorer = BagScorer(accuracy_scorer, sparse_input=False)
         estimator = bagAccScorer.estimator_fit(dumb, train_bags, train_labels)
         test_score = bagAccScorer(estimator, test_bags, test_labels)
         train_score = bagAccScorer(estimator, train_bags, train_labels)
@@ -228,7 +226,6 @@ class TestBagScorer(unittest.TestCase):
 
         # Dummy data
         train_bags, train_labels = self.train_bags, self.train_labels
-        test_bags, test_labels = self.test_bags, self.test_labels
 
         # Define an estimator
         dumb = DummyClassifier(strategy='constant', constant=1)
@@ -246,7 +243,7 @@ class TestBagScorer(unittest.TestCase):
         print('Averaged accuracies : ', np.mean(accuracies))
 
         # Custom scorer
-        bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
+        bagAccScorer = BagScorer(accuracy_scorer, sparse_input=False)
         scorer = {'bag-accuracy-scorer': bagAccScorer,
                    }
 
@@ -267,9 +264,6 @@ class TestBagScorer(unittest.TestCase):
         If the splits are not equal size then they will be close to equal"""
         self.assertAlmostEqual(np.mean(res['test_bag-accuracy-scorer']), 
                                expected_accuracy, 3)
-        # Just check the mean also LOL
-        self.assertEqual(np.mean(res['test_bag-accuracy-scorer']), 
-                         expected_accuracy)
         # 4 Crossvalidation splits
         self.assertTrue(len(res['test_bag-accuracy-scorer']) == 4)
         # Assert result has dictionary values
@@ -288,7 +282,7 @@ class TestBagScorer(unittest.TestCase):
         dumb = DummyClassifier(strategy='constant', constant=1)
 
         # Test custom scorer
-        bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
+        bagAccScorer = BagScorer(accuracy_scorer, sparse_input=False)
 
         # _fit_and_score testing
         X = self.train_bags
@@ -356,7 +350,7 @@ class TestBagScorer(unittest.TestCase):
         dumb = DummyClassifier(strategy='constant', constant=1)
 
         # Test custom scorer
-        bagAccScorer = BagScorer(accuracy_scorer, sparse=True)
+        bagAccScorer = BagScorer(accuracy_scorer, sparse_input=False)
         
         # Rename for easier parameters
         X = self.train_bags
@@ -365,9 +359,9 @@ class TestBagScorer(unittest.TestCase):
         estimator = dumb
         groups = None
         cv = 3
-        n_jobs=3
+        # n_jobs=3
         verbose=0
-        pre_dispatch=6
+        # pre_dispatch=6
         fit_params=None
         return_estimator=True
         error_score='raise'
@@ -417,7 +411,8 @@ class TestCrossValidation(unittest.TestCase):
         n_bags = 100
         m_instances_range = [5,10] # Dynamic number instance per bag
         p = 5
-        bags_sparse = []
+        bags_sparse = np.empty(n_bags, dtype='object')
+        bags_dense = np.empty(n_bags, dtype='object')
         # 25% negative class, 75% positive class
         # Bags are created with random data, of shape (n, (m,p))
         labels = np.concatenate((np.ones(int(n_bags*0.5)),
@@ -426,31 +421,27 @@ class TestCrossValidation(unittest.TestCase):
         for n in range(0, n_bags):
             m_instances = np.random.randint(m_instances_range[0], 
                                             m_instances_range[1],)
-            bag = np.random.randint(low=0, high=2, size=(m_instances, p))
-            bag_sparse = csr_matrix(bag)
-            bags_sparse.append(bag_sparse)
-            
-        bags_sparse = np.array(bags_sparse)
+            bag_dense = np.random.randint(low=0, high=2, size=(m_instances, p))
+            bag_sparse = csr_matrix(bag_dense)
+            bags_sparse[n] = bag_sparse
+            bags_dense[n] = bag_dense
 
         # Split dummy dataset dataset
-        rs = ShuffleSplit(n_splits=1, test_size=0.2, train_size=0.8)
-        train_index, test_index = next(rs.split(bags_sparse, labels))
-        train_bags, train_labels = bags_sparse[train_index], labels[train_index]
-        test_bags, test_labels = bags_sparse[test_index], labels[test_index]
-        self.train_bags, self.train_labels = bags_sparse[train_index], labels[train_index]
-        self.test_bags, self.test_labels = bags_sparse[test_index], labels[test_index]
+        self.bags_sparse = bags_sparse
+        self.labels = labels
+        self.bags_dense = bags_dense
+        self.n_bags = n_bags
+        self.instance_space = p
         
         return None
     
-    
-    def test_bag_cross_validate_sparse(self):
+    def test_bag_cross_validate_sparse_input(self):
         
         # Scoring
         accuracy_scorer = make_scorer(accuracy_score, normalize='weighted')
 
         # Dummy data
-        train_bags, train_labels = self.train_bags, self.train_labels
-        test_bags, test_labels = self.test_bags, self.test_labels
+        bags_sparse, labels = self.bags_sparse, self.labels
 
         # Define an estimator
         estimator = KNeighborsClassifier(n_neighbors=10, 
@@ -459,29 +450,202 @@ class TestCrossValidation(unittest.TestCase):
                                          n_jobs=4)
 
         # Custom scorer
-        bagAccScorer = BagScorer(accuracy_scorer, input_sparse=True)
+        bagAccScorer = BagScorer(accuracy_scorer, sparse_input=True)
         scorer = {'bag-accuracy-scorer': bagAccScorer,
                   }
 
         # Test cross_validate_bag
         # Res is a dictonary of lists {'fit_time':[1,2,3],
         # 'test_bag-accuracy-scorer':[0.1,0.2,0.3]}
-        res = cross_validate_bag(estimator, train_bags, train_labels,
+        res = cross_validate_bag(estimator, bags_sparse, labels,
                                  cv=4, scoring=scorer,
-                                 n_jobs=1, verbose=0, fit_params=None,
-                                 pre_dispatch='2*n_jobs', return_train_score=False,
-                                 return_estimator=False, error_score='raise')
-
+                                 n_jobs=1, 
+                                 verbose=0, 
+                                 fit_params=None,
+                                 pre_dispatch='2*n_jobs', 
+                                 return_train_score=False,
+                                 return_estimator=False, 
+                                 error_score='raise')
 
         # 4 Crossvalidation splits
         self.assertTrue(len(res['test_bag-accuracy-scorer']) == 4)
+        
         # Assert result has dictionary values
         self.assertIn('fit_time', res.keys())
         self.assertIn('score_time', res.keys())
         
+        # An error should be reaised if we pass a sparse input array
+        with self.assertRaises(ValueError):
+            res = cross_validate_bag(estimator, self.bags_dense, labels,
+                                     cv=4, scoring=scorer,
+                                     n_jobs=1, 
+                                     verbose=0, 
+                                     fit_params=None,
+                                     pre_dispatch='2*n_jobs', 
+                                     return_train_score=False,
+                                     return_estimator=False, 
+                                     error_score='raise')
+        
+        return None
+    
+    def test_bag_cross_validate_dense(self):
+        
+        # Scoring
+        accuracy_scorer = make_scorer(accuracy_score, normalize='weighted')
+
+        # Dummy data
+        bags_dense, labels = self.bags_dense, self.labels
+
+        # Define an estimator
+        estimator = KNeighborsClassifier(n_neighbors=10, 
+                                         weights='uniform',
+                                         algorithm='ball_tree', 
+                                         n_jobs=4)
+
+        # Custom scorer
+        bagAccScorer = BagScorer(accuracy_scorer, sparse_input=False)
+        scorer = {'bag-accuracy-scorer': bagAccScorer,
+                  }
+
+        # Test cross_validate_bag
+        # Res is a dictonary of lists {'fit_time':[1,2,3],
+        # 'test_bag-accuracy-scorer':[0.1,0.2,0.3]}
+        res = cross_validate_bag(estimator, bags_dense, labels,
+                                 cv=4, scoring=scorer,
+                                 n_jobs=1, 
+                                 verbose=0, 
+                                 fit_params=None,
+                                 pre_dispatch='2*n_jobs', 
+                                 return_train_score=False,
+                                 return_estimator=False, 
+                                 error_score='raise')
+
+        # 4 Cross-validation splits
+        self.assertTrue(len(res['test_bag-accuracy-scorer']) == 4)
+        
+        # Assert result has dictionary values
+        self.assertIn('fit_time', res.keys())
+        self.assertIn('score_time', res.keys())
+        
+        # An error should be reaised if we pass a sparse input array
+        with self.assertRaises(ValueError):
+            res = cross_validate_bag(estimator, self.bags_sparse, labels,
+                                     cv=4, scoring=scorer,
+                                     n_jobs=1, 
+                                     verbose=0, 
+                                     fit_params=None,
+                                     pre_dispatch='2*n_jobs', 
+                                     return_train_score=False,
+                                     return_estimator=False, 
+                                     error_score='raise')
+        
         return None
 
 
+
+class TestBagToSI(unittest.TestCase):
+    
+    
+    def setUp(self):
+        """Generate some dummy data (sparse and dense)
+        Create bags and single-instance data
+        A set of bags have a shape [n x (m x p)], and can be through of as an
+        array of bag instances.
+        n is the number of bags
+        m is the number of instances within each bag (this can vary between bags)
+        p is the feature space of each instance"""
+        
+        # Generating sparse features
+        n_bags = 100
+        m_instances_range = [5,10] # Dynamic number instance per bag
+        m_instances_total = 0 # Total number of instances over all bags
+        p = 5
+        bags_sparse = np.empty(n_bags, dtype='object')
+        bags_dense = np.empty(n_bags, dtype='object')
+        # 25% negative class, 75% positive class
+        # Bags are created with random data, of shape (n, (m,p))
+        labels = np.concatenate((np.ones(int(n_bags*0.5)),
+                                 np.zeros(int(n_bags*(1-0.5))),
+                                 ))
+        
+        for n in range(0, n_bags):
+            m_instances = np.random.randint(m_instances_range[0], 
+                                            m_instances_range[1],)
+            m_instances_total += m_instances
+            # Generate sparse and dense bags
+            bag_dense = np.random.randint(low=0, high=2, size=(m_instances, p))
+            bag_sparse = csr_matrix(bag_dense)
+            bags_sparse[n] = bag_sparse
+            bags_dense[n] = bag_dense
+            
+        self.bags_sparse = bags_sparse
+        self.labels = labels
+        self.bags_dense = bags_dense
+        self.n_bags = n_bags
+        self.instance_space = p
+        self.m_instances_total = m_instances_total
+
+        return None
+    
+    
+    def test_bag_2_si_dense_input(self):
+        
+        # Initialization for manual testing
+        bags_sparse = self.bags_sparse
+        labels = self.labels
+        bags_dense = self.bags_dense
+        
+        # bags_2_si should generate an dense array output with dense input
+        si, si_labels = bags_2_si(bags_dense, labels, sparse_input=False)
+        self.assertEqual(si.shape[0], self.m_instances_total)
+        self.assertEqual(si.shape[1], self.instance_space)
+        self.assertEqual(si_labels.shape[0], self.m_instances_total)
+        self.assertIsInstance(si, np.ndarray)
+        msg="Dense single instances should be of rank 2. Got {}".format(si.ndim)
+        self.assertTrue(si.ndim == 2, msg)
+        self.assertIsInstance(si[0], np.ndarray)
+        
+        # Dense input, indicate sparse
+        si, si_labels = bags_2_si(bags_sparse, labels, sparse_input=False)
+        self.assertEqual(si.shape[0], self.m_instances_total)
+        self.assertEqual(si.shape[1], self.instance_space)
+        self.assertEqual(si_labels.shape[0], self.m_instances_total)
+        self.assertIsInstance(si, np.ndarray)
+        msg="Dense single instances should be of rank 2. Got {}".format(si.ndim)
+        self.assertTrue(si.ndim == 2, msg)
+        self.assertIsInstance(si[0], np.ndarray)
+        
+        return None
+    
+    
+    def test_bag_2_si_sparse_input(self):
+        
+        # Initialization for manual testing
+        bags_sparse = self.bags_sparse
+        labels = self.labels
+        bags_dense = self.bags_dense
+        
+        # bags_2_si wil lgenerate a sparse array output with sparse input
+        si, si_labels = bags_2_si(bags_sparse, labels, sparse_input=True)
+        self.assertEqual(si.shape[0], self.m_instances_total)
+        self.assertEqual(si.shape[1], self.instance_space)
+        self.assertEqual(si_labels.shape[0], self.m_instances_total)
+        self.assertIsInstance(si, csr_matrix)
+        msg="Dense single instances should be of rank 2. Got {}".format(si.ndim)
+        self.assertTrue(si.ndim == 2, msg)
+        self.assertIsInstance(si[0], csr_matrix)
+        
+        # Sparse input, indicate dense
+        si, si_labels = bags_2_si(bags_dense, labels, sparse_input=True)
+        self.assertEqual(si.shape[0], self.m_instances_total)
+        self.assertEqual(si.shape[1], self.instance_space)
+        self.assertEqual(si_labels.shape[0], self.m_instances_total)
+        self.assertIsInstance(si, csr_matrix)
+        msg="Dense single instances should be of rank 2. Got {}".format(si.ndim)
+        self.assertTrue(si.ndim == 2, msg)
+        self.assertIsInstance(si[0], csr_matrix)
+        
+        return None
 
 
 

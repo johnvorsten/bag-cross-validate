@@ -24,8 +24,7 @@ from sklearn.utils.metaestimators import _safe_split
 from sklearn.model_selection._validation import (_score, 
                                                  _aggregate_score_dicts, 
                                                  logger)
-from sklearn.base import (is_classifier, 
-                          clone)
+from sklearn.base import (is_classifier, clone)
 from sklearn.utils import indexable
 from sklearn.metrics._scorer import _check_multimetric_scoring
 from sklearn.exceptions import FitFailedWarning
@@ -493,17 +492,21 @@ def bags_2_si_generator(bags, bag_labels, sparse_input=False):
 
         if sparse_input and isinstance(bag, csr_matrix):
             # Keep instances as sparse array
-            instances = bag # Sparse array
+            instances = bag # instances is sparse
+            
         elif sparse_input and not isinstance(bag, csr_matrix):
             # Convert instances to csr matrix if sparse=True and the bag
             # is not currently a csr matrix
-            instances = csr_matrix(bag) # Dense array
+            instances = csr_matrix(bag) # instances is sparse
+            
         elif not sparse_input and isinstance(bag, csr_matrix):
             # Convert csr_array to dense array
-            instances = bag.toarray()
+            instances = bag.toarray() # instances is dense
+            
         elif not sparse_input and not isinstance(bag, csr_matrix):
             # Keep as dense array
-            instances = bag # Dense array
+            instances = bag # instances is dense
+            
         else:
             msg=('bags must be sparse array (scipy.sparse.csr_matrix) or' +
             ' dense array (np.array). Got type {}')
@@ -514,7 +517,7 @@ def bags_2_si_generator(bags, bag_labels, sparse_input=False):
         yield instances, labels
 
 
-def bags_2_si( bags, bag_labels, sparse_input=False):
+def bags_2_si(bags, bag_labels, sparse_input:bool=False):
     """Convert a n x (m x p) array of bag instances into a k x p array of
     instances. n is the number of bags, and m is the number of instances within
     each bag. m can vary per bag. k is the total number of instances within
@@ -525,8 +528,15 @@ def bags_2_si( bags, bag_labels, sparse_input=False):
     bag_labels: (iterable) containing labels assocaited with each bag. Labels
         are expanded and each instance within a bag inherits the label of the
         bag
-    sparse: (bool) if True, the output instances are left as a sparse array.
+    sparse_input: (bool) if True, the output instances are left as a sparse array.
         Some sklearn estimators can handle sparse feature inputs
+        case {
+            bags and dense, sparse_input = True
+            bags are dense, sparse_input = False
+            bags are sparse, sparse_input = True
+            bags are sparse, sparse_input = False
+            }
+        
     output
     -------
     instances, labels: (np.array) or (scipy.sparse.csr.csr_matrix)
@@ -542,7 +552,6 @@ def bags_2_si( bags, bag_labels, sparse_input=False):
 
     # Gather datasets
     for part_instances, part_labels in bag_iterator:
-
         instances.append(part_instances)
         labels.append(part_labels)
 
@@ -588,9 +597,12 @@ class BagScorer:
         
         inputs
         ------
-        scorer: (#TODO)
-        sparse_input: (bool) if True, the output instances are left as a sparse array.
-        Some sklearn estimators can handle sparse feature inputs"""
+        scorer: (sklearn.metrics._scorer._PredictScorer) 
+        sparse_input: (bool) if False, the training and testing instances are left 
+            as-is. If the input bags/features are sparse arrays, then they are 
+            left as sparse. Set to True to convert sparse featuers into dense
+            arrays when predicting and fitting the estimator.
+            Some sklearn estimators can handle sparse feature inputs"""
 
         # Initialization parameters
         self.sparse_input = sparse_input
@@ -610,15 +622,15 @@ class BagScorer:
         return None
 
 
-    def __call__(self, estimator, *positional_args, **kwargs): # TODO This should accept *args, **kwargs
+    def __call__(self, estimator, *positional_args, **kwargs):
         """
         inputs
         -------
         estimator: () the model that should be evaluated
         X: (iterable) is validation data. It has to be an iterable of bags,
-        for example an [n x (m x p)] array of bag instances. n is the number
-        of bags, and m is the number of instances within each bag.
-        p is the feature space of each instance
+            for example an [n x (m x p)] array of bag instances. n is the number
+            of bags, and m is the number of instances within each bag.
+            p is the feature space of each instance
         y: () is the ground truth target for X
         outputs
         -------
@@ -632,7 +644,27 @@ class BagScorer:
         check_is_fitted(estimator)
 
         # Predict on bags
-        bag_predictions = self.predict_bags(estimator, X)
+        if self.sparse_input and isinstance(X[0], csr_matrix):
+            # Leave instances as sparse, and predict on sparse instances
+            bag_predictions = self.predict_bags(estimator, X)
+            
+        elif self.sparse_input and not isinstance(X[0], csr_matrix):
+            msg=("The user indicated they passed sparse input, but the bags "
+                 "are not a scipy.sparse.csr_matrix."
+                 "Either convert bag-level data to sparse arrays, or correct "
+                 "The call signature ot sparse_input=False")
+            raise ValueError(msg)
+            
+        elif not self.sparse_input and isinstance(X[0], csr_matrix):
+            msg=("The user indicated they passed dense input, but the bags "
+                 "are a scipy.sparse.csr_matrix."
+                 "Either convert bag-level data to sparse arrays, or correct "
+                 "The call signature ot sparse_input=True")
+            raise ValueError(msg)
+            
+        elif not self.sparse_input and not isinstance(X[0], csr_matrix):
+            # Leave instances as dense, and predict on dense instances
+            bag_predictions = self.predict_bags(estimator, X)
 
         # Calculate metrics - API call to scorer function
         if hasattr(self.scorer, '_score_func'):
@@ -668,7 +700,7 @@ class BagScorer:
             raise ValueError(msg)
 
         # Find SI data
-        SI_examples, SI_labels = bags_2_si(X_train, y_train, self.sparse)
+        SI_examples, SI_labels = bags_2_si(X_train, y_train, self.sparse_input)
 
         if y_train is None:
             # This should not happen - see ValueError
@@ -679,14 +711,14 @@ class BagScorer:
         return estimator # Fitted estimator
 
     @staticmethod
-    def reduce_bag_label(predictions, method: str = 'mode') -> Union[str, int]:
+    def reduce_bag_label(predictions, method: str='mode') -> Union[str, int]:
         """Determine the bag label from the single-instance classifications of 
         its members. 'mode' returns the most frequently occuring bag label
         inputs
         -------
         predictions: (iterable) of labels
-        method: (str) 'mode' is only supported.
-            TODO support based on label weights
+        method: (str) 'mode' is only supported. Return the mode of predictd 
+            labels
         outputs
         -------
         label: (str / int) of most common prediction"""
@@ -699,15 +731,16 @@ class BagScorer:
             raise ValueError(method_error)
 
         return label
-
+    
+    
     @classmethod
-    def predict_bags(cls, estimator, bags, method: str ='mode'):
+    def predict_bags(cls, estimator, bags, method:str='mode'):
         """
         inputs
         ------
-        estimator: ()
-        bags: ()
-        method: (string)
+        estimator: () # TODO
+        bags: () # TODO
+        method: (string) # TODO
         outputs
         -------"""
 
@@ -716,6 +749,31 @@ class BagScorer:
         for bag in bags:
             # Predict labels in bag
             si_predictions = estimator.predict(bag)
+            bag_prediction = cls.reduce_bag_label(si_predictions, method=method)
+            bag_predictions.append(bag_prediction)
+
+        return bag_predictions
+    
+    
+    @classmethod
+    def predict_bags_densify(cls, estimator, bags, method:str='mode'):
+        """
+        When bag instances are sparse, then first convert the instances to 
+        dense features
+        inputs
+        ------
+        estimator: () # TODO
+        bags: () # TODO
+        method: (string) # TODO
+        outputs
+        -------"""
+
+        bag_predictions = []
+
+        for bag in bags:
+            # Predict labels in bag
+            dense_features = bag.toarray()
+            si_predictions = estimator.predict(dense_features)
             bag_prediction = cls.reduce_bag_label(si_predictions, method=method)
             bag_predictions.append(bag_prediction)
 
